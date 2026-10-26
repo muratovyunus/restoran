@@ -172,6 +172,10 @@ input:focus,select:focus,textarea:focus{background:#fff;border-color:var(--accen
 
 .msg a{color:inherit;word-break:break-all}
 .msg .btn{min-height:32px;padding:5px 12px}
+
+.dnav{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;margin-top:18px}
+.dnav .r{display:flex;flex-wrap:wrap;gap:10px;margin-left:auto}
+@media(max-width:760px){.dnav,.dnav .r{width:100%}.dnav .btn{flex:1 1 100%;justify-content:center}}
 </style>
 </head>
 <body>
@@ -533,7 +537,7 @@ async function renderEditor(){
    <div class="c12">${fld('Фото блюда','6',1,`<div class="photo"><div class="im" style="${u?`background-image:url('${u}')`:''}">${u?'':'Нет фото'}</div><div><div class="inline"><button class="btn sm primary" id="bPhoto">${d.photo?'Заменить фото':'Загрузить фото'}</button>${d.photo && d.photo.key && (d.photo.warn || d.photo.err) ? '<button class="btn sm" id="bCrop">Обрезать до 4:3</button>' : ''}${d.photo?'<button class="btn sm ghost danger" id="bDelPh">Убрать</button>':''}</div>${d.photo?`<div class="mini" style="margin-top:8px">${d.photo.key ? esc(d.photo.name) + ' · ' + d.photo.w + '×' + d.photo.h + ' · ' + (d.photo.size/1048576).toFixed(1) + ' МБ' : 'по ссылке' + (d.photo.w ? ' · ' + d.photo.w + '×' + d.photo.h : '')}</div>`:''}${d.photo && d.photo.warn?`<div class="msg warn">${esc(d.photo.warn)}</div>`:''}<div id="phSt">${phStatus(d.photo)}</div><div class="msg" data-dm="photo"></div><div class="help">Горизонтальное, не меньше 800×600 пикселей, JPG до 25 МБ. Другие форматы переведём в JPG сами.</div><div style="margin-top:10px"><label class="f" style="font-size:13px">Или вставьте прямую ссылку на фото</label><input type="url" inputmode="url" data-link="1" placeholder="https://i.postimg.cc/…/foto.jpg" value="${esc(d.photo && !d.photo.key ? d.photo.url : '')}"></div><div class="help">Фото, загруженные через форму, отправляются на postimages.org и открываются по прямой ссылке — как в инструкции по заполнению. Вручную: загрузите фото на postimages.org и скопируйте «Прямая ссылка» (Direct link) либо возьмите ссылку на фото с сайта ресторана (правый клик → «Копировать адрес изображения»)</div></div></div>`)}</div>
    <div class="c12">${fld('ИКПУ (налоговый код)','7',1,`<div class="taxbox"><div class="inline"><input type="text" inputmode="numeric" maxlength="17" data-d="tax" value="${esc(d.tax)}" placeholder="17 цифр">${d.cat && d.taxManual && CAT_TAX[d.cat] !== d.tax ? `<button class="btn sm" id="bTaxReset">Вернуть по категории</button>` : ''}</div><div class="mini" style="margin-top:6px">${d.cat ? (d.taxManual && CAT_TAX[d.cat] !== d.tax ? 'Код изменён вручную. По категории «' + esc(d.cat) + '» — ' + CAT_TAX[d.cat] : 'Подставлен по категории «' + esc(d.cat) + '». Если код не подходит — измените') : 'Выберите категорию — код подставится сам'}</div><div class="msg" data-dm="tax"></div></div>`)}</div>
   </div>
-  <div class="inline" style="justify-content:space-between;margin-top:18px"><button class="btn" id="bPrev">← Предыдущее</button><button class="btn primary" id="bNext">Следующее блюдо →</button></div>`;
+  <div class="dnav"><button class="btn" id="bPrev">← Предыдущее</button><div class="r"><button class="btn" id="bNext">+ Добавить следующее блюдо</button><button class="btn primary" id="bFinish">Завершить добавление</button></div></div>`;
   refreshDish();
 }
 function refreshDish(){
@@ -577,7 +581,8 @@ function bindMenu(){
     if (t.id === 'emptyAdd') addDish();
     else if (t.id === 'bBack') showList();
     else if (t.id === 'bPrev') go(-1);
-    else if (t.id === 'bNext') go(1);
+    else if (t.id === 'bNext') addDish();
+    else if (t.id === 'bFinish') exportNow(false);
     else if (t.id === 'bDup' && d){ const c = blankDish(Object.assign({}, d, {id: uid(), name: d.name + ' (копия)', photo: null})); S.dishes.splice(S.dishes.indexOf(d)+1, 0, c); S.sel = c.id; save(); renderMenu(); toast('Копия создана — поменяйте название и фото'); }
     else if (t.id === 'bDel' && d){ if (!confirm('Удалить это блюдо?')) return; const k = S.dishes.indexOf(d); if (d.photo && d.photo.key) await IDB.del(d.photo.key); S.dishes.splice(k,1); S.sel = (S.dishes[k] || S.dishes[k-1] || {}).id || null; save(); renderMenu(); if (MOB()) showList(); }
     else if (t.id === 'bPhoto' && d){ const f = (await pickFiles(false, 'image/*'))[0]; if (!f) return; busy(true); try { const r = await takePhoto(f, 'dish'); if (d.photo && d.photo.key) await IDB.del(d.photo.key); d.photo = r; touched.add(d.id+'photo'); queueUpload(r); } catch(err){ toast(err.message); } busy(false); save(); renderList(); renderEditor(); }
@@ -610,8 +615,18 @@ function setTab(t){
   $('#pInfo').classList.toggle('hidden', t !== 'info'); $('#pMenu').classList.toggle('hidden', t !== 'menu');
   document.body.classList.toggle('on-menu', t === 'menu');
   if (t === 'menu'){ document.body.classList.remove('m-edit'); renderMenu(); if (!MOB() && !S.sel && S.dishes.length){ S.sel = S.dishes[0].id; renderMenu(); } }
+  updateCTA();
   scrollTo(0,0);
 }
+/* главная кнопка: на анкете ведёт в меню, в меню — завершает и скачивает */
+const IC_NEXT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m0 0l-6-6m6 6l-6 6"/></svg>';
+const IC_DL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg>';
+function updateCTA(){
+  const info = S.tab !== 'menu', lb = info ? 'Продолжить' : 'Завершить и скачать', ic = info ? IC_NEXT : IC_DL;
+  $('#bExport').innerHTML = ic + `<span class="lb">${lb}</span>`;
+  $('#bExport2').innerHTML = (info ? '' : ic) + lb + (info ? ' ' + IC_NEXT : '');
+}
+function ctaClick(){ if (S.tab !== 'menu'){ setTab('menu'); if (!S.dishes.length) addDish(); } else exportNow(false); }
 function renderBar(){
   const s = stats();
   $('#tInfo').textContent = `заполнено ${s.infoDone} из ${s.infoAll}`;
@@ -713,7 +728,7 @@ async function exportNow(force){
 function init(){
   try { const d = JSON.parse(localStorage.getItem(LS) || 'null'); if (d){ S.info = Object.assign(blankInfo(), d.info || {}); S.dishes = (d.dishes || []).map(x => blankDish(x)); S.tab = d.tab || 'info'; if (S.dishes.length) S.sel = S.dishes[0].id; } } catch(e){}
   $$('.tab').forEach(b => b.onclick = () => setTab(b.dataset.tab));
-  $('#bExport').onclick = () => exportNow(false); $('#bExport2').onclick = () => exportNow(false);
+  $('#bExport').onclick = ctaClick; $('#bExport2').onclick = ctaClick;
   bindInfo(); bindMenu();
   renderInfo(); setTab(S.tab);
   if (S.info.guv) S.info.guv.noUpload = true;
