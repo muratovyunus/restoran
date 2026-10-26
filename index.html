@@ -176,6 +176,11 @@ input:focus,select:focus,textarea:focus{background:#fff;border-color:var(--accen
 .dnav{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;margin-top:18px}
 .dnav .r{display:flex;flex-wrap:wrap;gap:10px;margin-left:auto}
 @media(max-width:760px){.dnav,.dnav .r{width:100%}.dnav .btn{flex:1 1 100%;justify-content:center}}
+
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{border:0;background:var(--gray);color:var(--ink);border-radius:12px;padding:8px 12px;font:inherit;font-size:14px;cursor:pointer;min-height:36px}
+.chip:hover{background:rgba(92,90,87,.17)}
+.chip.on{background:var(--accent);font-weight:500}
 </style>
 </head>
 <body>
@@ -412,8 +417,8 @@ function renderInfo(){
   <div class="card"><h2>О ресторане</h2><p class="lead">Эти данные увидят покупатели в Яндекс Еде.</p>
    <div class="grid">
     <div class="c6">${fld('Название ресторана','1',1,inp('name','Например: Плов Центр'))}</div>
-    <div class="c6">${fld('Тип заведения','2',1,`<input type="text" list="dlType" data-i="type" value="${esc(i.type)}" placeholder="Выберите или впишите"><div class="msg" data-m="type"></div>`)}</div>
-    <div class="c6">${fld('Основной тип кухни','3',1,`<input type="text" list="dlCuis" data-i="cuisine" value="${esc(i.cuisine)}" placeholder="Выберите или впишите"><div class="msg" data-m="cuisine"></div>`)}</div>
+    <div class="c6">${fld('Тип заведения','2',1,`<input type="text" data-i="type" value="${esc(i.type)}" placeholder="Выберите ниже или впишите свой" autocomplete="off">${chips('type', TYPES, i.type)}<div class="msg" data-m="type"></div>`)}</div>
+    <div class="c6">${fld('Основной тип кухни','3',1,`<input type="text" data-i="cuisine" value="${esc(i.cuisine)}" placeholder="Выберите ниже или впишите свой" autocomplete="off">${chips('cuisine', CUISINES, i.cuisine)}<div class="msg" data-m="cuisine"></div>`)}</div>
     <div class="c6">${fld('Город','4',1,`<select data-i="city"><option value="">Выберите город</option>${CITIES.map(c => `<option ${c===i.city?'selected':''}>${c}</option>`).join('')}</select><div class="msg" data-m="city"></div>`)}</div>
     <div class="c12">${fld('Адрес(а)','5',1,`<div id="addrs">${i.addresses.map((a,n) => `<div class="inline" style="margin-bottom:8px"><input type="text" data-addr="${n}" value="${esc(a)}" placeholder="Улица, дом, ориентир">${i.addresses.length>1?`<button class="btn sm ghost" data-delAddr="${n}" title="Убрать адрес">✕</button>`:''}</div>`).join('')}</div><button class="pill" id="bAddAddr">+ Ещё адрес</button><div class="msg" data-m="addresses"></div>`, 'Если у ресторана несколько точек, добавьте каждую отдельной строкой')}</div>
     <div class="c6">${fld('Максимальное время приготовления одного заказа, минут','7',1,`<input type="number" inputmode="numeric" min="1" data-i="cook" value="${esc(i.cook)}" placeholder="30"><div class="inline" style="margin-top:8px">${COOK.map(c => `<button class="pill" data-cook="${c}">${c} мин</button>`).join('')}</div><div class="msg" data-m="cook"></div>`)}</div>
@@ -448,8 +453,7 @@ function renderInfo(){
    <div class="grid">
     <div class="c12">${fld('Фото офлайн-меню','16',1,`<div id="menuPhBox"></div><div class="msg" data-m="menuPh"></div>`,'Сфотографируйте все страницы бумажного меню — можно несколько файлов')}</div>
     <div class="c12">${fld('Фото обложки ресторана','18',1,`<div id="coverBox"></div><div class="msg" data-m="cover"></div>`,'Горизонтальное, не меньше 1600×1200 пикселей, JPG до 25 МБ')}</div>
-   </div></div>
-  <datalist id="dlType">${TYPES.map(t => `<option value="${t}">`).join('')}</datalist><datalist id="dlCuis">${CUISINES.map(t => `<option value="${t}">`).join('')}</datalist>`;
+   </div></div>`;
   renderFiles();
   refreshInfo();
 }
@@ -465,8 +469,12 @@ function refreshInfo(){
   $$('[data-m]', $('#pInfo')).forEach(m => { const k = m.dataset.m; const show = touched.has('i:'+k) || S.showAll; const t = show ? (e[k]||'') : ''; m.className = 'msg' + (t ? ' err' : ''); m.textContent = t; const el = $(`[data-i="${k}"]`); if (el) el.classList.toggle('bad', !!t); });
   renderBar();
 }
+/* варианты кнопками: datalist на iPhone показывается только в строке над клавиатурой */
+const chips = (k, list, v) => `<div class="chips" data-chips="${k}">${list.map(t => `<button type="button" class="chip${t === v ? ' on' : ''}" data-pick="${k}" data-v="${esc(t)}">${esc(t)}</button>`).join('')}</div>`;
 function bindInfo(){
   const P = $('#pInfo');
+  P.addEventListener('click', e => { const c = e.target.closest('[data-pick]'); if (!c) return; const k = c.dataset.pick, inp = P.querySelector(`[data-i="${k}"]`); inp.value = c.dataset.v; inp.dispatchEvent(new Event('input', {bubbles:true})); touched.add('i:'+k); refreshInfo(); });
+  P.addEventListener('input', e => { const k = e.target.dataset && e.target.dataset.i, box = k && P.querySelector(`[data-chips="${k}"]`); if (box) box.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b.dataset.v === e.target.value)); });
   P.addEventListener('input', e => {
     const t = e.target, i = S.info;
     if (t.dataset.i){ i[t.dataset.i] = t.value; touched.add('i:'+t.dataset.i); }
