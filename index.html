@@ -177,6 +177,7 @@ input:focus,select:focus,textarea:focus{background:#fff;border-color:var(--accen
 .dnav .r{display:flex;flex-wrap:wrap;gap:10px;margin-left:auto}
 @media(max-width:760px){.dnav,.dnav .r{width:100%}.dnav .btn{flex:1 1 100%;justify-content:center}}
 
+a.btn{text-decoration:none}
 </style>
 </head>
 <body>
@@ -262,7 +263,7 @@ const URLS = {};
 async function fileURL(f){ if (!f) return ''; if (!f.key && f.url) return f.url; if (URLS[f.key]) return URLS[f.key]; const b = await IDB.get(f.key); if (!b) return ''; return (URLS[f.key] = URL.createObjectURL(b)); }
 
 /* ================= состояние ================= */
-const blankInfo = () => ({name:'',type:'',cuisine:'',city:'',addresses:[''],sched:DAYS.map(() => ({on:true, from:'10:00', to:'23:00'})),cook:'',owner:'',director:'',dirPhone:'',dirEmail:'',urg1:'',urg2:'',accPhone:'',accEmail:'',inn:'',guv:null,mfo:'',account:'',regCode:'',menuPh:[],cover:null});
+const blankInfo = () => ({name:'',type:'',cuisine:'',city:'',addresses:[''],sched:DAYS.map(() => ({on:true, from:'10:00', to:'23:00'})),cook:'',owner:'',director:'',dirPhone:'',dirEmail:'',urg1:'',urg2:'',accPhone:'',accEmail:'',inn:'',legal:'',guv:null,mfo:'',account:'',regCode:'',menuPh:[],cover:null});
 const blankDish = o => Object.assign({id:uid(),cat:'',name:'',weight:'',wunit:'г',price:'',ingr:'',photo:null,tax:'',taxManual:false}, o||{});
 const S = {tab:'info', info:blankInfo(), dishes:[], sel:null, q:''};
 const touched = new Set();
@@ -410,6 +411,12 @@ const inp = (k, ph, type, extra) => `<input type="${type||'text'}" data-i="${k}"
 function renderInfo(){
   const i = S.info;
   $('#pInfo').innerHTML = `
+  <div class="card"><h2>Юридическое лицо</h2><p class="lead">Начните с ИНН — по нему подставим юридическое название.</p>
+   <div class="grid">
+    <div class="c6">${fld('ИНН / ПИНФЛ','15.1',1,inp('inn','ИНН — 9 цифр, ПИНФЛ — 14 цифр','text','inputmode="numeric"'))}<div id="innSt"></div></div>
+    <div class="c6">${fld('Юридическое название','15',0,inp('legal','Например: "PLOV CENTR" MCHJ'),'Заполнится само по ИНН. Если не нашлось — впишите вручную')}</div>
+   </div></div>
+
   <div class="card"><h2>О ресторане</h2><p class="lead">Эти данные увидят покупатели в Яндекс Еде.</p>
    <div class="grid">
     <div class="c6">${fld('Название ресторана','1',1,inp('name','Например: Плов Центр'))}</div>
@@ -438,7 +445,6 @@ function renderInfo(){
 
   <div class="card"><h2>Реквизиты</h2><p class="lead"><span class="n mini">15</span> Нужны для договора и выплат.</p>
    <div class="grid">
-    <div class="c6">${fld('ИНН / ПИНФЛ','15.1',1,inp('inn','ИНН — 9 цифр, ПИНФЛ — 14 цифр','text','inputmode="numeric"'))}</div>
     <div class="c6">${fld('МФО банка','15.3',1,inp('mfo','5 цифр','text','inputmode="numeric"'))}</div>
     <div class="c6">${fld('Расчётный счёт','15.4',1,inp('account','20 цифр','text','inputmode="numeric"'))}</div>
     <div class="c6">${fld('Регистрационный код налогоплательщика','17',1,inp('regCode','Как в регистрационных документах','text','inputmode="numeric"'))}</div>
@@ -451,7 +457,7 @@ function renderInfo(){
     <div class="c12">${fld('Фото обложки ресторана','18',1,`<div id="coverBox"></div><div class="msg" data-m="cover"></div>`,'Горизонтальное, не меньше 1600×1200 пикселей, JPG до 25 МБ')}</div>
    </div></div>`;
   renderFiles();
-  refreshInfo();
+  refreshInfo(); innLast = ''; innLookupSoon();
 }
 async function fileTile(f, del, extra){ const u = await fileURL(f); return `<div class="fl"><div class="im" style="background-image:url('${u}')"></div><div class="nm" title="${esc(f.name)}">${esc(f.name)}</div><div class="mini">${f.w}×${f.h} · ${(f.size/1048576).toFixed(1)} МБ</div>${f.err?`<div class="msg err">${esc(f.err)}</div>`:''}${f.warn?`<div class="msg warn">${esc(f.warn)}</div>`:''}${f.noUpload ? '<div class="mini">в интернет не выкладывается</div>' : phStatus(f)}${extra||''}<button class="x" ${del} title="Убрать">×</button></div>`; }
 async function renderFiles(){
@@ -470,8 +476,33 @@ const OTHER = '__other';
 const pick = (k, list, v, ph) => { const own = v && !list.includes(v);
   return `<select data-pick="${k}"><option value="">${ph}</option>${list.map(t => `<option ${t === v ? 'selected' : ''}>${esc(t)}</option>`).join('')}<option value="${OTHER}" ${own ? 'selected' : ''}>Другое — впишу сам</option></select>`
     + `<input type="text" data-i="${k}" value="${esc(own ? v : '')}" placeholder="Впишите свой вариант" autocomplete="off" style="margin-top:8px${own ? '' : ';display:none'}">`; };
+/* поиск юр. данных по ИНН: функция /api/inn на Vercel читает orginfo.uz */
+const INN_API = /vercel\.app$|^localhost$|^127\.0\.0\.1$/.test(location.hostname) ? '/api/inn' : 'https://restoran-eda-app.vercel.app/api/inn';
+let innT = null, innLast = '', innAuto = {};
+function innStatus(html, cls){ const b = $('#innSt'); if (b) b.innerHTML = html ? `<div class="msg ${cls||''}" style="margin-top:8px">${html}</div>` : ''; }
+function innLookupSoon(){
+  clearTimeout(innT); const d = digits(S.info.inn);
+  if (!(d.length === 9 || d.length === 14)){ innLast = ''; innStatus(''); return; }
+  if (d === innLast) return;
+  innT = setTimeout(() => innLookup(d), 500);
+}
+async function innLookup(d){
+  innLast = d; innStatus('Ищем компанию по ИНН… Это может занять до 20 секунд');
+  let r; try { const x = await fetch(INN_API + '?tin=' + d); r = await x.json(); if (!x.ok) throw new Error(r.error || x.status); }
+  catch(e){ if (innLast === d){ innLast = ''; innStatus('Не получилось найти автоматически. Впишите юридическое название вручную', 'warn'); } return; }
+  if (innLast !== d) return;
+  const i = S.info;
+  if (!r.found){ // убираем то, что подставили по прошлому ИНН, а вписанное вручную не трогаем
+    Object.keys(innAuto).forEach(k => { if (i[k] === innAuto[k]){ i[k] = ''; const el = $(`[data-i="${k}"]`); if (el) el.value = ''; } }); innAuto = {}; save(); refreshInfo();
+    innStatus('По этому ИНН компания не найдена. Проверьте цифры или заполните данные вручную', 'warn'); return; }
+  const put = (k, v) => { if (v && (!String(i[k]||'').trim() || i[k] === innAuto[k])){ i[k] = v; innAuto[k] = v; const el = $(`[data-i="${k}"]`); if (el) el.value = v; } };
+  put('legal', r.name);
+  save(); refreshInfo();
+  innStatus(`✓ Нашли: <b>${esc(r.name)}</b>`, 'ok');
+}
 function bindInfo(){
   const P = $('#pInfo');
+  P.addEventListener('input', e => { if (e.target.dataset && e.target.dataset.i === 'inn') setTimeout(innLookupSoon); }); // после основного обработчика, который пишет S.info.inn
   P.addEventListener('change', e => { const sel = e.target, k = sel.dataset && sel.dataset.pick; if (!k) return;
     const inp = P.querySelector(`[data-i="${k}"]`), own = sel.value === OTHER;
     inp.style.display = own ? '' : 'none'; S.info[k] = own ? inp.value.trim() : sel.value; if (!own) inp.value = '';
@@ -713,7 +744,7 @@ async function exportNow(force){
     const menu = []; for (let n = 0; n < i.menuPh.length; n++) menu.push(await enc(`офлайн_меню/меню_${n+1}.${ext(i.menuPh[n])}`, i.menuPh[n]));
     const cover = i.cover ? await enc('обложка.' + ext(i.cover), i.cover) : '';
     const sched = i.sched.map((d,n) => `${DSH[n]}: ${d.on ? (d.from === '00:00' && d.to === '23:59' ? 'круглосуточно' : d.from + '–' + d.to) : 'выходной'}`).join('; ');
-    const ans = [i.name, i.type, i.cuisine, i.city, i.addresses.map(a => a.trim()).filter(Boolean).join('; '), sched, i.cook ? i.cook + ' мин' : '', i.owner, i.director, fmtPhone(i.dirPhone), i.dirEmail, [i.urg1, i.urg2].filter(Boolean).map(fmtPhone).join(', '), fmtPhone(i.accPhone), i.accEmail, '', digits(i.inn), guv, digits(i.mfo), digits(i.account), menu.join(', '), String(i.regCode||'').trim()];
+    const ans = [i.name, i.type, i.cuisine, i.city, i.addresses.map(a => a.trim()).filter(Boolean).join('; '), sched, i.cook ? i.cook + ' мин' : '', i.owner, i.director, fmtPhone(i.dirPhone), i.dirEmail, [i.urg1, i.urg2].filter(Boolean).map(fmtPhone).join(', '), fmtPhone(i.accPhone), i.accEmail, String(i.legal||'').trim(), digits(i.inn), guv, digits(i.mfo), digits(i.account), menu.join(', '), String(i.regCode||'').trim()];
     const infoRows = TPL.map((q, n) => [q, n === 0 ? (ans[0] || 'Ответы ') : ans[n]]);
     infoRows.push(['18 Фото обложки ресторана (1600×1200)', cover]);
     const mrows = [['Категория','Блюдо','Вес','Цена','Ингредиенты','Фото','ИКПУ']];
